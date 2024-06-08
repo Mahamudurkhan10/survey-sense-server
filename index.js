@@ -102,7 +102,20 @@ async function run() {
       const result = await surveyCollection.updateOne(filter, updatedDoc)
       res.send(result)
     })
-   
+    app.patch('/noVoteUpdate/:id', async (req, res) => {
+      const survey = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          noVote: survey.no,     
+          vote:survey.vote         
+        
+        }
+      }
+      const result = await surveyCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
     // user
     app.get('/users', async (req, res) => {
 
