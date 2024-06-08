@@ -26,6 +26,8 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     //     await client.connect();
     const surveyCollection = client.db('SurveySense').collection('surveys')
+    const usersCollection = client.db('SurveySense').collection('users')
+    const reportCollection = client.db('SurveySense').collection('report')
 
     app.get('/surveys', async (req, res) => {
     
@@ -40,6 +42,8 @@ async function run() {
         category: survey.category,
         options: survey.options,
         deadline_date: survey.deadline_date,
+        yesVote : survey.yesVote,
+        noVote: survey.noVote,
         vote: survey.vote,
         status:'publish',
         timestamp:new Date   
@@ -58,7 +62,105 @@ async function run() {
       const result = await surveyCollection.findOne(query) 
       res.send(result)
     })
+    app.get('/survey/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await surveyCollection.findOne(query);
 
+      res.send(result)
+    })
+    app.patch('/update/:id', async (req, res) => {
+      const survey = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          title: survey.title,     
+          description:survey.description,
+          category: survey.category,
+          options: survey.options,
+          deadline_date: survey.deadline_date,
+         
+          
+        
+        }
+      }
+      const result = await surveyCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+    app.patch('/yesVoteUpdate/:id', async (req, res) => {
+      const survey = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          yesVote: survey.yes,     
+          vote:survey.vote         
+        
+        }
+      }
+      const result = await surveyCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+   
+    // user
+    app.get('/users', async (req, res) => {
+
+      const result = await usersCollection.find().toArray(); 
+      res.send(result)
+    })
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email }
+      const existingUser = await usersCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: 'user already exist', insertedId: null })
+      }
+      const result = await usersCollection.insertOne(user)
+      res.send(result)
+    })
+    app.get('/users/:email',  async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query)
+      res.send(user)
+     
+    })
+
+    app.patch('/users/admin/:id', async (req, res) => {
+      const item = req.body;
+      console.log(item);
+      const id = req.params.id;
+      
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: item.role
+        }
+     
+      }
+      
+      const result = await usersCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+    // report 
+    app.get('/report', async (req, res) => {
+
+      const result = await reportCollection.find().toArray(); 
+      res.send(result)
+    })
+    app.post('/report', async(req ,res) =>{
+       const report = req.body;
+       const result = await reportCollection.insertOne(report)
+       res.send(result)
+    })
+    app.get('/report/:email',  async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await reportCollection.find(query).toArray();
+      res.send(user)
+     
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
