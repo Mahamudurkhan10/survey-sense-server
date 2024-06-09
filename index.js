@@ -28,6 +28,7 @@ async function run() {
     const surveyCollection = client.db('SurveySense').collection('surveys')
     const usersCollection = client.db('SurveySense').collection('users')
     const reportCollection = client.db('SurveySense').collection('report')
+    const responseCollection = client.db('SurveySense').collection('response')
 
     app.get('/surveys', async (req, res) => {
     
@@ -174,6 +175,18 @@ async function run() {
       res.send(user)
      
     })
+    // vote /Response
+    app.get('/response', async (req, res) => {
+
+      const result = await responseCollection.find().toArray(); 
+      res.send(result)
+    })
+    app.post('/response',async(req,res)=>{
+       const response = req.body;
+       const result = await responseCollection.insertOne(response);
+       res.send(result)
+    })
+  
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
