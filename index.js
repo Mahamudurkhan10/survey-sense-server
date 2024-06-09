@@ -181,6 +181,13 @@ async function run() {
       const result = await responseCollection.find().toArray(); 
       res.send(result)
     })
+    app.get('/response/:id',  async (req, res) => {
+      const id = req.params.id;
+      const query = { resId: id };
+      const result = await responseCollection.find(query).toArray();
+      res.send(result)
+     
+    })
     app.post('/response',async(req,res)=>{
        const response = req.body;
        const result = await responseCollection.insertOne(response);
