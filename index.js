@@ -92,6 +92,32 @@ async function run() {
       const result = await surveyCollection.updateOne(filter, updatedDoc)
       res.send(result)
     })
+    app.get('/totalVotesByCategory', async (req, res) => {
+      
+        const result = await surveyCollection.aggregate([
+          {
+            $group: {
+              _id: "$category",
+              category: { $first: "$category" },
+              totalYesVote: { $sum: "$yesVote" },
+              totalNoVote: { $sum: "$noVote" },
+              totalVote:{$sum:'$vote'}
+            }
+            
+          },
+          {
+            $project: {
+              _id: 0,
+              category: 1, 
+              totalYesVote: 1,
+              totalNoVote: 1,
+              totalVote:1
+            }
+          }
+        ]).toArray();
+
+        res.send(result);
+  })
     // payment
     app.post('/create-payment-intent', async (req, res) => {
       const { price } = req.body;
@@ -254,7 +280,7 @@ async function run() {
     app.get('/comments/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
-      const result = await responseCollection.find(query).toArray();
+      const result = await commentsCollection.find(query).toArray();
       res.send(result)
 
     })
