@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId, Timestamp } = require('mongodb');
 require('dotenv').config()
+const jwt = require('jsonwebtoken')
 const app = express();
 const stripe = require('stripe')(process.env.STRIPE_ENV_KEY)
 const port = process.env.PROT || 5000;
@@ -32,7 +33,49 @@ async function run() {
     const responseCollection = client.db('SurveySense').collection('response')
     const paymentCollection = client.db('SurveySense').collection('payments')
     const commentsCollection = client.db('SurveySense').collection('comments')
+    const feedBackCollection = client.db('SurveySense').collection('feedback')
+    // token
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+      res.send({ token });
+    })
+    const verifyToken = (req, res, next) => {
 
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: 'unauthorized access' })
+      }
+      const token = req.headers.authorization.split(' ')[1]
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: 'unauthorized access' })
+        }
+        req.decoded = decoded;
+        next()
+      })
+
+
+    }
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      const isAdmin = user?.role === "admin"
+      if (!isAdmin) {
+        return res.status(403).send({ message: 'forbidden access' })
+      }
+      next()
+    }
+    const verifySurveyor = async (req, res, next) => {
+      const email = req.decoded.email
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      const surveyor = user?.role === "surveyor"
+      if (!surveyor) {
+        return res.status(401).send({ message: 'unauthorized access' })
+      }
+      next()
+    }
     app.get('/surveys', async (req, res) => {
 
       const result = await surveyCollection.find().toArray()
@@ -57,9 +100,11 @@ async function run() {
     })
     app.get('/mostVotedSurvey', async (req, res) => {
 
-      const result = await surveyCollection.find().sort({ vote: -1 }).toArray();
+      const result = await surveyCollection.find().sort({ vote: -1}).toArray();
       res.send(result)
     })
+   
+    
     app.get('/surveyDetail/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
@@ -73,7 +118,7 @@ async function run() {
 
       res.send(result)
     })
-    app.patch('/update/:id', async (req, res) => {
+    app.patch('/update/:id', verifyToken, verifySurveyor, async (req, res) => {
       const survey = req.body;
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
@@ -93,36 +138,40 @@ async function run() {
       res.send(result)
     })
     app.get('/totalVotesByCategory', async (req, res) => {
-      
-        const result = await surveyCollection.aggregate([
-          {
-            $group: {
-              _id: "$category",
-              category: { $first: "$category" },
-              totalYesVote: { $sum: "$yesVote" },
-              totalNoVote: { $sum: "$noVote" },
-              totalVote:{$sum:'$vote'}
-            }
-            
-          },
-          {
-            $project: {
-              _id: 0,
-              category: 1, 
-              totalYesVote: 1,
-              totalNoVote: 1,
-              totalVote:1
-            }
-          }
-        ]).toArray();
 
-        res.send(result);
-  })
+      const result = await surveyCollection.aggregate([
+        {
+          $group: {
+            _id: "$category",
+            category: { $first: "$category" },
+            totalYesVote: { $sum: "$yesVote" },
+            totalNoVote: { $sum: "$noVote" },
+            totalVote: { $sum: '$vote' }
+          }
+
+        },
+        {
+          $project: {
+            _id: 0,
+            category: 1,
+            totalYesVote: 1,
+            totalNoVote: 1,
+            totalVote: 1
+          }
+        }
+      ]).toArray();
+
+      res.send(result);
+    })
     // payment
+    app.get('/payments', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await paymentCollection.find().toArray();
+      res.send(result)
+    })
     app.post('/create-payment-intent', async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
-      
+
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
@@ -138,6 +187,7 @@ async function run() {
       res.send(paymentResult)
 
     })
+  
     app.patch('/yesVoteUpdate/:id', async (req, res) => {
       const survey = req.body;
       const id = req.params.id;
@@ -145,7 +195,8 @@ async function run() {
       const updatedDoc = {
         $set: {
           yesVote: survey.yes,
-          vote: survey.vote
+          vote: survey.vote,
+          voterEmail: survey.voterEmail
 
         }
       }
@@ -159,8 +210,8 @@ async function run() {
       const updatedDoc = {
         $set: {
           noVote: survey.no,
-          vote: survey.vote
-
+          vote: survey.vote,
+          voterEmail: survey.voterEmail
         }
       }
       const result = await surveyCollection.updateOne(filter, updatedDoc)
@@ -182,6 +233,12 @@ async function run() {
       const result = await usersCollection.insertOne(user)
       res.send(result)
     })
+    app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await usersCollection.deleteOne(query)
+      res.send(result)
+    })
     app.get('/users/:email', async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
@@ -192,7 +249,7 @@ async function run() {
 
     app.patch('/users/admin/:id', async (req, res) => {
       const item = req.body;
-      console.log(item);
+
       const id = req.params.id;
 
       const filter = { _id: new ObjectId(id) };
@@ -208,10 +265,10 @@ async function run() {
     })
     app.patch('/userRoleUpdate/:email', async (req, res) => {
       const item = req.body;
-     
+
       const email = req.params.email;
 
-      const filter = { email:email };
+      const filter = { email: email };
       const updatedDoc = {
         $set: {
           role: item.role
@@ -241,7 +298,7 @@ async function run() {
 
     })
     // vote /Response
-    app.get('/response', async (req, res) => {
+    app.get('/response', verifyToken, async (req, res) => {
 
       const result = await responseCollection.find().toArray();
       res.send(result)
@@ -273,7 +330,7 @@ async function run() {
       res.send(result)
     })
     // comment
-    app.get('/comments', async (req, res) => {
+    app.get('/comments', verifyToken, async (req, res) => {
       const result = await commentsCollection.find().toArray();
       res.send(result)
     })
@@ -284,9 +341,20 @@ async function run() {
       res.send(result)
 
     })
-    app.post('/comments',async(req,res)=>{
+    app.post('/comments', async (req, res) => {
       const comment = req.body;
       const result = await commentsCollection.insertOne(comment)
+      res.send(result)
+    })
+    // feedBack
+    app.get('/feedback', verifyToken, verifySurveyor, async (req, res) => {
+      const result = await feedBackCollection.find().toArray();
+      res.send(result)
+
+    })
+    app.post('/feedback', verifyToken, verifyAdmin, async (req, res) => {
+      const feedBack = req.body;
+      const result = await feedBackCollection.insertOne(feedBack)
       res.send(result)
     })
 
