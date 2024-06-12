@@ -77,11 +77,22 @@ async function run() {
       next()
     }
     app.get('/surveys', async (req, res) => {
-
-      const result = await surveyCollection.find().toArray()
+      const filter = req.query;
+    
+      const query ={
+        vote:{$lt:200}
+      }
+      const options = {
+         sort:{
+          vote: filter.sort === 'asc'? 1 : -1
+         }
+         
+      }
+      console.log(options);
+      const result = await surveyCollection.find(query,options).toArray()
       res.send(result)
     })
-    app.post('/surveys', async (req, res) => {
+    app.post('/surveys', async (req, res) => { 
       const survey = req.body;
       const newSurvey = {
         title: survey.title,
@@ -100,11 +111,11 @@ async function run() {
     })
     app.get('/mostVotedSurvey', async (req, res) => {
 
-      const result = await surveyCollection.find().sort({ vote: -1}).toArray();
+      const result = await surveyCollection.find().sort({ vote: -1 }).toArray();
       res.send(result)
     })
-   
-    
+
+
     app.get('/surveyDetail/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
@@ -116,6 +127,12 @@ async function run() {
       const query = { _id: new ObjectId(id) }
       const result = await surveyCollection.findOne(query);
 
+      res.send(result)  
+    })
+    app.delete('/surveys/:id', verifyToken,verifySurveyor, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await surveyCollection.deleteOne(query)
       res.send(result)
     })
     app.patch('/update/:id', verifyToken, verifySurveyor, async (req, res) => {
@@ -187,7 +204,7 @@ async function run() {
       res.send(paymentResult)
 
     })
-  
+
     app.patch('/yesVoteUpdate/:id', async (req, res) => {
       const survey = req.body;
       const id = req.params.id;
@@ -246,7 +263,34 @@ async function run() {
       res.send(user)
 
     })
+    app.get('/users/admin/:email', verifyToken, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
 
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access ' })
+      }
+      const query = { email: email };
+      const user = await usersCollection.findOne(query)
+      let admin = false;
+      if (user) {
+        admin = user?.role == 'admin';
+      }
+      res.send({ admin })
+    })
+    app.get('/users/surveyor/:email', verifyToken, verifySurveyor, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access ' })
+      }
+      const query = { email: email };
+      const user = await usersCollection.findOne(query)
+      let surveyor = false;
+      if (user) {
+        surveyor = user?.role == 'surveyor';
+      }
+      res.send({ surveyor })
+    })
     app.patch('/users/admin/:id', async (req, res) => {
       const item = req.body;
 
